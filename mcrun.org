@@ -1,0 +1,177 @@
+
+#+TITLE: mcrun: Framework for materials chemistry calculations
+
+* Introduction
+
+  In computational materials chemistry it is necessary to keep track of
+  many projects and calculations. Some of these are performed locally
+  while many jobs are passed to batch systems on remote high-performance
+  computing (HPC) services and must be recovered after they have run.
+
+  Computational materials chemistry research should be highly
+  reproducible; the calculations are deterministic and exact setups take
+  the form of data files which are readily stored and shared. However,
+  in practice the information available in published papers is often
+  limited, supplementary material is already heavily processed and raw
+  data is disorganised.
+
+  This framework aims to help with:
+
+  1. day-to-day management of computational "runs" including job
+     creation, submission and basic post-processing;
+  2. clear, consistent reporting of reproducible calculations with
+     nicely formatted and complete documentation for every run;
+  3. recall of previous calculations through fast database queries.
+
+* Outline
+
+** Jobs
+
+   Each job will be primarily represented by a .org document. Emacs
+   with org-mode is a powerful environment for technical note-taking,
+   project management and literate programming. Org documents can be
+   exported to more widespread formats for distribution including PDF
+   documentation, HTML websites and Reveal.JS presentations. It is
+   also beginning to gain some traction as a basic markup language; it
+   is supported by Pandoc and Github provides HTML previews.
+
+   The jobs represent "calculation directories" which consist of
+   either a single batch calculation or a set of calculations with
+   similar resource requirements and which are processed together.  By
+   using org-babel it is possible to specify all the input files in
+   the org file and "tangle" them as part of the run. This makes for a
+   single attractive document for review.
+
+   Each job will also have a single entry in the database.
+
+   Job files may be initialised through convenient scripts. Import of
+   input files is especially useful for incorporating previous work
+   into this system.
+
+** Projects
+
+   Jobs are organised into projects. One or more org files are used to
+   track notes, tasks and progress on a particular project. This may
+   be used as the skeleton for a paper or SI document, but should also
+   contain unpublished comments and technical details. Org-mode
+   provides powerful linking syntax.
+
+   Project org files should be exported to HTML and made available for
+   reference through Dropbox or a secure website.
+
+   Calculation folders are organised into project directories for ease
+   of synchronisation and archiving.
+
+** Staging and archiving
+
+   In-progress jobs are kept in staging directories while being
+   developed and computed. Once computation is complete they are
+   committed to the archive; copies of the archive are maintained on
+   personal workstations and in remote secure data storage. (Some kind
+   of mapping must be defined so that archived calculations go to the
+   right places. Generally multiple =mcruns= projects will correspond
+   to a single "project" in the remote data archive.)
+
+** Database
+
+   An Sqlite database is used for quick retrieval and search on
+   calculation details. This is maintained in online revision
+   control. As raw sqlite3 databases are not very suitable for
+   revision control, it needs to be stored in a serialised form with
+   tools for rapidly converting to/from an indexed database.
+
+
+* Implementation
+
+** mcrun.el
+
+   Core features are implemented in Emacs lisp, as this allows the org
+   file to be manipulated with the powerful inbuilt functions. Also,
+   Lisp is awesome and I haven't really used it for this kind of
+   project before.
+
+   The properties for a run are stored in the alist
+   =mcrun-run-properties=. There will be various ways to populate
+   this, but for now we just define some defaults.
+
+  
+   #+BEGIN_SRC elisp
+   (setq mcrun-run-properties 
+       '(("COLUMNS" . "%8ID %8Born %10Formula %4Phase %4Code %5XC %12Type")
+         ("Project" . "ZAO") 
+         ("ID" . "ZAO001")
+         ("Formula" . "ZnSb2O4")
+         ("Phase" . "")
+         ("Code" . "vasp")
+         ("Type" . "Singlepoint")
+         ("XC" . "PBE")
+         ("N" . "1")
+         ("Resource" . "crumble")
+         ("Born" . "20160601")))
+   #+END_SRC
+
+   A few header properties should be set first.
+
+   #+BEGIN_SRC elisp
+   (defun mcrun-get-id ()
+    "Get ID from mcrun-run-properties if possible"
+    (if (boundp 'mcrun-run-properties)
+     (if (assoc "ID" mcrun-run-properties)
+      (cdr (assoc "ID" mcrun-run-properties)))))
+   
+   (defun mcrun-insert-headers ()
+    "Insert document headers"
+    (interactive)
+    (let* ((headers '(("#+TITLE:" . (mcrun-get-id))
+                      ("#+AUTHOR:" . "Adam J. Jackson")
+                       )))
+     (dolist (header-pair headers)
+      (insert (car header-pair))
+      (insert " ")
+      (insert (eval (cdr header-pair)))
+      (newline))
+    ))
+   #+END_SRC
+
+   The "info" section contains the metadata for the
+   calculation as a property drawer. This is presented as a dynamic table
+  
+   #+BEGIN_SRC elisp
+   (defun mcrun-insert-info ()
+   "Insert an info heading"
+   (interactive)
+   (save-excursion
+     (org-insert-heading nil t t)
+     (insert "Info")
+
+     (if (boundp 'mcrun-run-properties)
+       (mcrun-set-properties mcrun-run-properties))
+     (save-buffer)
+     (end-of-buffer)
+     (newline)
+     (org-create-dblock '(:name "columnview" :hlines 1 :id local))
+     (org-update-dblock)
+    ))
+
+   (defun mcrun-set-properties (properties-alist)
+     "Insert an alist of property-value pairs to org property drawer"
+     (dolist (pv-pair  properties-alist)
+     (org-set-property (car pv-pair) (cdr pv-pair))))
+   #+END_SRC
+
+   Bringing these together:
+
+   #+BEGIN_SRC elisp
+   (defun mcrun-make-test-file ()
+    "Rough org-file creation function"
+    (interactive)
+
+    (let* ((ID (mcrun-get-id))
+           (filename (concat ID ".org")))
+    (if (get-buffer filename) (kill-buffer filename))
+    (if (file-exists-p filename) (delete-file filename))
+    (find-file filename)
+    (mcrun-insert-headers)
+    (mcrun-insert-info)
+          ))
+   #+END_SRC
