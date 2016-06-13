@@ -1,4 +1,3 @@
-
 #+TITLE: mcrun: Framework for materials chemistry calculations
 
 * Introduction
@@ -84,6 +83,9 @@
 * Implementation
 
 ** mcrun.el
+   :PROPERTIES:
+   :tangle:   mcrun.el
+   :END:
 
    Core features are implemented in Emacs lisp, as this allows the org
    file to be manipulated with the powerful inbuilt functions. Also,
@@ -94,23 +96,28 @@
    =mcrun-run-properties=. There will be various ways to populate
    this, but for now we just define some defaults.
 
+*** Package setup
+    #+BEGIN_SRC elisp
+    (provide 'mcrun)
+    #+END_SRC
+
 *** Building the org file
 
 **** Headers and Info
   
      #+BEGIN_SRC elisp
      (setq mcrun-run-properties 
-         '(("COLUMNS" . "%8ID %8Born %10Formula %4Phase %4Code %5XC %12Type")
-           ("Project" . "ZAO") 
-           ("ID" . "ZAO001")
-           ("Formula" . "ZnSb2O4")
-           ("Phase" . "")
-           ("Code" . "vasp")
-           ("Type" . "Singlepoint")
-           ("XC" . "PBE")
-           ("N" . "1")
-           ("Resource" . "crumble")
-           ("Born" . "20160601")))
+          '(("COLUMNS" . "%8ID %8Born %10Formula %4Phase %4Code %5XC %12Type")
+            ("Project" . "ZAO") 
+            ("ID" . "ZAO001")
+            ("Formula" . "ZnSb2O4")
+            ("Phase" . "")
+            ("Code" . "vasp")
+            ("Type" . "Singlepoint")
+            ("XC" . "PBE")
+            ("N" . "1")
+            ("Resource" . "crumble")
+            ("Born" . "20160601")))
      #+END_SRC
 
      A few header properties should be set first.
@@ -120,7 +127,7 @@
       "Get ID from mcrun-run-properties if possible"
       (if (boundp 'mcrun-run-properties)
        (if (assoc "ID" mcrun-run-properties)
-        (cdr (assoc "ID" mcrun-run-properties)))))
+         (cdr (assoc "ID" mcrun-run-properties)))))
    
      (defun mcrun-insert-headers ()
       "Insert document headers"
@@ -138,50 +145,102 @@
 
      The "info" section contains the metadata for the
      calculation as a property drawer. This is presented as a dynamic table
-  
+
+      #+BEGIN_SRC elisp
+      (defun mcrun-insert-info ()
+      "Insert an info heading"
+      (interactive)
+      (save-excursion
+        (org-insert-heading nil t t)
+        (insert "Info")
+
+        (if (boundp 'mcrun-run-properties)
+          (mcrun-set-properties mcrun-run-properties))
+        (save-buffer)
+        (end-of-buffer)
+        (newline)
+        (org-create-dblock '(:name "columnview" :hlines 1 :id local))
+        (org-update-dblock)
+       ))
+
+      (defun mcrun-set-properties (properties-alist)
+        "Insert an alist of property-value pairs to org property drawer"
+        (dolist (pv-pair  properties-alist)
+        (org-set-property (car pv-pair) (cdr pv-pair))))
+      #+END_SRC
+
+
+**** File creation
+
      #+BEGIN_SRC elisp
-     (defun mcrun-insert-info ()
-     "Insert an info heading"
-     (interactive)
-     (save-excursion
-       (org-insert-heading nil t t)
-       (insert "Info")
-
-       (if (boundp 'mcrun-run-properties)
-         (mcrun-set-properties mcrun-run-properties))
-       (save-buffer)
-       (end-of-buffer)
-       (newline)
-       (org-create-dblock '(:name "columnview" :hlines 1 :id local))
-       (org-update-dblock)
-      ))
-
-     (defun mcrun-set-properties (properties-alist)
-       "Insert an alist of property-value pairs to org property drawer"
-       (dolist (pv-pair  properties-alist)
-       (org-set-property (car pv-pair) (cdr pv-pair))))
+     (defun mcrun-find-new-file (filename)
+      "Find a blank file, deleting existing file/buffer as necessary"
+        (if (get-buffer filename) (kill-buffer filename))
+        (if (file-exists-p filename) (delete-file filename))
+       (find-file filename))
      #+END_SRC
 
-     Bringing these together:
+***** Test file
+      A test file generator which brings together some of the functions
+      that have been developed.
 
-     #+BEGIN_SRC elisp
-     (defun mcrun-make-test-file ()
-      "Rough org-file creation function"
-      (interactive)
+      #+BEGIN_SRC elisp
+      (defun mcrun-make-test-file ()
+       "Rough org-file creation function"
+       (interactive)
+
+       (let* ((ID (mcrun-get-id))
+              (filename (concat ID ".org")))
+       (mcrun-find-new-file filename)
+       (mcrun-insert-headers)
+       (mcrun-insert-info)
+             ))
+      #+END_SRC
+
+***** Import from input files
+      #+BEGIN_SRC elisp
+      (defun mcrun-insert-source-file (source_file)
+      "Insert a source block from file"
+      (interactive "fSource file: ")
+      (cond (
+        t (progn
+            (insert (concat "#+NAME: " source_file))
+            (newline)
+            (insert (concat "#+BEGIN_SRC conf :tangle " source_file))
+            (newline)
+            (insert-file source_file)
+            ;; insert-file leaves mark at end of file, so can
+            ;; navigate there with exchange-point-and-mark
+            (exchange-point-and-mark)
+            (newline)
+            (insert "#+END_SRC")
+        )
+      )))
+
+
+      (defun mcrun-create-from-input-files (input_list)
+      "Generate a job org file from existing input files"
+      (interactive "fFile")
 
       (let* ((ID (mcrun-get-id))
              (filename (concat ID ".org")))
-      (if (get-buffer filename) (kill-buffer filename))
-      (if (file-exists-p filename) (delete-file filename))
-      (find-file filename)
-      (mcrun-insert-headers)
-      (mcrun-insert-info)
-            ))
-     #+END_SRC
+        (mcrun-find-new-file filename)
+        (mcrun-insert-headers)
+        (mcrun-insert-info)
 
-**** Structure
+        (org-insert-heading-after-current)
+        (insert "Input")
+        (newline)
+        (dolist (source_file input_list)
+         (mcrun-insert-source-file source_file))
+             ))
+      #+END_SRC
+
 
 ** Python wrappers
+   :PROPERTIES:
+   :mkdirp:   yes
+   :END:
 
    We use python scripts to wrap around ASE functionality.
 
@@ -191,11 +250,14 @@
 
    #+BEGIN_SRC elisp
    (setenv "PYTHONPATH" "/usr/local/lib/python2.7/site-packages")
+   (shell-command-to-string "python -c 'import ase; print ase.__file__'")
+   (shell-command-to-string "python ~/src/mcrun/bin/ase-render.py ~/runs/tests/POSCAR")
+
    #+END_SRC
 
 *** Render image of structure   
 
-    #+BEGIN_SRC python tangle: src/ase-render.py
+    #+BEGIN_SRC python :tangle bin/ase-render.py
     import ase.io
     import argparse
 
@@ -213,12 +275,12 @@
         main(args.filename)
     #+END_SRC
 
-    #+BEGIN_SRC elisp
-    (defun mcrun-ase-render (input-file)
-     "Render a crystal structure to PNG"
-     (shell-command (concat "python2 src/ase-render.py " input-file))
-    )
+    #+BEGIN_SRC elisp :tangle mcrun.el
+      (defconst mcrun-bin-dir (file-name-as-directory 
+        (concat (file-name-directory load-file-name) "bin")))
+      (defun mcrun-ase-render (input-file)
+       "Render a crystal structure to PNG"
+       (let* ((ase-render-py (concat mcrun-bin-dir "ase-render.py"))
+              (command-string (concat "python " ase-render-py " " input-file)))
+       (shell-command-to-string command-string)))
     #+END_SRC
-
-**** TODO make mcrun structure render work from any path
-
