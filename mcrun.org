@@ -84,6 +84,10 @@
 * Implementation
 
 ** mcrun.el
+  :PROPERTIES:
+  :tangle: mcrun.el
+  :mkdirp: yes
+  :END:
 
    Core features are implemented in Emacs lisp, as this allows the org
    file to be manipulated with the powerful inbuilt functions. Also,
@@ -93,6 +97,8 @@
    The properties for a run are stored in the alist
    =mcrun-run-properties=. There will be various ways to populate
    this, but for now we just define some defaults.
+
+
 
 *** Building the org file
 
@@ -190,7 +196,8 @@
    mean time, here is a hack:
 
    #+BEGIN_SRC elisp
-   (setenv "PYTHONPATH" "/usr/local/lib/python2.7/site-packages")
+   (setenv "PYTHONPATH" '("/usr/local/lib/python2.7/site-packages"
+                          "~/.local/lib/python2.7/site-packages"))
    #+END_SRC
 
 *** Render image of structure   
