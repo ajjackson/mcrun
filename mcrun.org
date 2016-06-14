@@ -204,7 +204,8 @@
       (interactive "fSource file: ")
       (cond (
         t (progn
-            (insert (concat "#+NAME: " source_file))
+            (org-insert-subheading t)
+            (insert source_file)
             (newline)
             (insert (concat "#+BEGIN_SRC conf :tangle " source_file))
             (newline)
@@ -214,14 +215,12 @@
             (exchange-point-and-mark)
             (newline)
             (insert "#+END_SRC")
+            (newline)
         )
       )))
 
-
-      (defun mcrun-create-from-input-files (input_list)
+      (defun mcrun-create-from-input-file-list (input_list)
       "Generate a job org file from existing input files"
-      (interactive "fFile")
-
       (let* ((ID (mcrun-get-id))
              (filename (concat ID ".org")))
         (mcrun-find-new-file filename)
@@ -234,6 +233,11 @@
         (dolist (source_file input_list)
          (mcrun-insert-source-file source_file))
              ))
+
+      (defun mcrun-create-from-input-file (file)
+      "Generate a job org file from existing input file"
+      (interactive "fFile")
+      (mcrun-create-from-input-file-list (list file)))
       #+END_SRC
 
 
