@@ -3,6 +3,11 @@
     margin-left: 100px;
 }
 
+#header {
+    font-family: Helvetica, Arial;
+    margin-left: 100px;
+}
+
 p {
     width: 600px;
 }
