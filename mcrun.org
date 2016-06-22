@@ -103,9 +103,10 @@
 * Implementation
 
 ** mcrun.el
-   :PROPERTIES:
-   :tangle:   mcrun.el
-   :END:
+  :PROPERTIES:
+  :tangle: mcrun.el
+  :mkdirp: yes
+  :END:
 
    Core features are implemented in Emacs lisp, as this allows the org
    file to be manipulated with the powerful inbuilt functions. Also,
@@ -120,6 +121,7 @@
     #+BEGIN_SRC elisp
     (provide 'mcrun)
     #+END_SRC
+    
 
 *** Building the org file
 
@@ -280,10 +282,11 @@
    mean time, here is a hack:
 
    #+BEGIN_SRC elisp
+   (setenv "PYTHONPATH" '("/usr/local/lib/python2.7/site-packages"
+                          "~/.local/lib/python2.7/site-packages"))
    (setenv "PYTHONPATH" "/usr/local/lib/python2.7/site-packages")
    (shell-command-to-string "python -c 'import ase; print ase.__file__'")
    (shell-command-to-string "python ~/src/mcrun/bin/ase-render.py ~/runs/tests/POSCAR")
-
    #+END_SRC
 
 *** Render image of structure   
