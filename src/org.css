@@ -1,0 +1,32 @@
+#content {
+    font-family: Helvetica, Arial;
+    margin-left: 100px;
+}
+
+p {
+    width: 600px;
+}
+
+h1, h2, h3, h4 {
+    font-family: Helvetica, Arial;
+    color: gray;
+    margin-left: -1em;
+}
+
+a {
+    color: black;
+}
+
+img {
+    display: block;
+    margin: 0;
+    max-width: 500px;
+    max-height: 500px;
+}
+
+blockquote p {
+    font-family: Georgia, Serif;
+    color: gray;
+    text-align: justify;
+    width: 500px;
+}
