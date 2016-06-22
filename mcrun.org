@@ -68,8 +68,28 @@
    committed to the archive; copies of the archive are maintained on
    personal workstations and in remote secure data storage. (Some kind
    of mapping must be defined so that archived calculations go to the
-   right places. Generally multiple =mcruns= projects will correspond
+   right places. Generally multiple =mcrun= projects will correspond
    to a single "project" in the remote data archive.)
+
+   The archiving process is:
+   - export .org file to HTML
+     - Make HTML file standalone and copy to lab notebook
+   - delete large data files (WAVECAR, CHGCAR, CHG)
+   - tar and gzip the run directories
+   - Write metadata to run database
+   - Copy folder to research data storage
+
+   Open problems:
+
+   - Identifying run directories. Could be "any subdirectory" but
+     would be nice to keep illustrations etc in seperate dir. Obvious
+     answer is to use a prefix e.g. "run-".
+   - Central DB for all projects, or per-project? Would be nice to
+     search globally for a compound, but per-project DBs would be nice
+     to package with data. Can do both...
+   - How to avoid accidentally pulling down files from remote
+     directories after the run has been committed? Ideally they would
+     be deleted at this point, but that seems dangerous.
 
 ** Database
 
@@ -240,6 +260,13 @@
       (mcrun-create-from-input-file-list (list file)))
       #+END_SRC
 
+*** Writing to the db
+
+    Useful functions:
+    - =(org-entry-properties)= returns an alist of the properties for
+      the current item.
+
+    - (org-goto-local-search-headings) looks interesting
 
 ** Python wrappers
    :PROPERTIES:
