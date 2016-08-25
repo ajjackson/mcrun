@@ -142,6 +142,29 @@
             ("Born" . "20160601")))
      #+END_SRC
 
+     We try to intelligently guess as many properties as possible based on the directory.
+
+     #+BEGIN_SRC elisp
+       (defun mcrun-guess-properties ()
+        "Get run ID from path if possible; otherwise, prompt user"
+        (let* ((id
+                (if (equal (file-name-extension buffer-file-name) "org")
+                (file-name-base buffer-file-name)
+                (read-from-minibuffer "Run ID: ")))
+               (project
+                (save-match-data (when (string-match "\\([[:alpha:]]+\\)[[:digit:]]+" id)
+                                        (match-string 1 id))))
+               (run
+                (save-match-data (when (string-match "[[:alpha:]]+\\([[:digit:]]+\\)" id)
+                                        (match-string 1 id))))
+                )
+          `(("ID" . ,id)
+            ("Project" . ,project)
+            ("Run" . ,run))))
+     #+END_SRC
+
+**** TODO The date should use (org-time-stamp)
+
      A few header properties should be set first.
 
      #+BEGIN_SRC elisp
@@ -269,6 +292,7 @@
       the current item.
 
     - (org-goto-local-search-headings) looks interesting
+
 
 ** Python wrappers
    :PROPERTIES:
