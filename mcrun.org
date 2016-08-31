@@ -22,6 +22,7 @@
      nicely formatted and complete documentation for every run;
   3. recall of previous calculations through fast database queries.
 
+
 * Outline
 
 ** Jobs
@@ -161,59 +162,67 @@
           `(("ID" . ,id)
             ("Project" . ,project)
             ("Run" . ,run))))
+
+       (defun mcrun-get-properties ()
+         "Generate properties alist for this file"
+         (let ((guesses (mcrun-guess-properties)))
+           (append
+             '(("COLUMNS" . "%8ID %8Born %10Formula %4Phase %4Code %5XC %12Type"))
+             guesses
+             '(("Formula" . "ZnSb2O4")
+               ("Phase" . "")
+               ("Code" . "vasp")
+               ("Type" . "Singlepoint")
+               ("XC" . "PBE")
+               ("N" . "1")
+               ("Resource" . "crumble"))
+             ;; temp buffer prevents writing time stamp.
+             ;; '(16) is double prefix; prevent interactive prompt
+             `(("Born" . ,(with-temp-buffer (org-time-stamp '(16) nil))))
+            ))
+         )
      #+END_SRC
 
-**** TODO The date should use (org-time-stamp)
+     A few header properties should be set, followed by he "info"
+     section.  This section contains the metadata for the calculation
+     as a property drawer. It is presented as a dynamic table.
 
-     A few header properties should be set first.
 
      #+BEGIN_SRC elisp
-     (defun mcrun-get-id ()
-      "Get ID from mcrun-run-properties if possible"
-      (if (boundp 'mcrun-run-properties)
-       (if (assoc "ID" mcrun-run-properties)
-         (cdr (assoc "ID" mcrun-run-properties)))))
-   
-     (defun mcrun-insert-headers ()
-      "Insert document headers"
-      (interactive)
-      (let* ((headers '(("#+TITLE:" . (mcrun-get-id))
-                        ("#+AUTHOR:" . "Adam J. Jackson")
-                         )))
-       (dolist (header-pair headers)
-        (insert (car header-pair))
-        (insert " ")
-        (insert (eval (cdr header-pair)))
-        (newline))
-      ))
-     #+END_SRC
+       (defun mcrun-insert-headers ()
+        "Insert document headers"
+        (interactive)
+        (let* ((properties (mcrun-get-properties))
+               (headers '(("#+TITLE:" . (cdr (assoc "ID" properties)))
+                          ("#+AUTHOR:" . "Adam J. Jackson")
+                          )))
+         (dolist (header-pair headers)
+          (insert (car header-pair))
+          (insert " ")
+          (insert (eval (cdr header-pair)))
+          (newline))
+         (mcrun-insert-info properties)
+        ))
 
-     The "info" section contains the metadata for the
-     calculation as a property drawer. This is presented as a dynamic table
+        (defun mcrun-insert-info (properties)
+        "Insert an info heading from properties assoc list"
+        (save-excursion
+          (org-insert-heading nil t t)
+          (insert "Info")
 
-      #+BEGIN_SRC elisp
-      (defun mcrun-insert-info ()
-      "Insert an info heading"
-      (interactive)
-      (save-excursion
-        (org-insert-heading nil t t)
-        (insert "Info")
+          (mcrun-set-properties properties)
+          (save-buffer)
+          (end-of-buffer)
+          (newline)
+          (org-create-dblock '(:name "columnview" :hlines 1 :id local))
+          (org-update-dblock)
+         ))
 
-        (if (boundp 'mcrun-run-properties)
-          (mcrun-set-properties mcrun-run-properties))
-        (save-buffer)
-        (end-of-buffer)
-        (newline)
-        (org-create-dblock '(:name "columnview" :hlines 1 :id local))
-        (org-update-dblock)
-       ))
-
-      (defun mcrun-set-properties (properties-alist)
-        "Insert an alist of property-value pairs to org property drawer"
-        (dolist (pv-pair  properties-alist)
-        (org-set-property (car pv-pair) (cdr pv-pair))))
+        (defun mcrun-set-properties (properties-alist)
+          "Insert an alist of property-value pairs to org property drawer"
+          (dolist (pv-pair  properties-alist)
+          (org-set-property (car pv-pair) (cdr pv-pair))))
       #+END_SRC
-
 
 **** File creation
 
@@ -234,11 +243,10 @@
        "Rough org-file creation function"
        (interactive)
 
-       (let* ((ID (mcrun-get-id))
+       (let* ((ID "TST1")
               (filename (concat ID ".org")))
        (mcrun-find-new-file filename)
        (mcrun-insert-headers)
-       (mcrun-insert-info)
              ))
       #+END_SRC
 
