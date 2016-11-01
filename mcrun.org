@@ -114,7 +114,7 @@
    Lisp is awesome and I haven't really used it for this kind of
    project before.
 
-   The properties for a run are stored in the alist
+   The properties for a run are stored in an alist
    =mcrun-run-properties=. There will be various ways to populate
    this, but for now we just define some defaults.
 
@@ -122,16 +122,24 @@
     #+BEGIN_SRC elisp
     (provide 'mcrun)
     #+END_SRC
-    
+
+*** Dependencies
+    #+BEGIN_SRC elisp
+    (require 's)
+    (require 'seq)
+    (require 'emacsql)
+    (require 'emacsql-sqlite)
+    #+END_SRC
+
 
 *** Building the org file
 
 **** Headers and Info
-  
+
      #+BEGIN_SRC elisp
-     (setq mcrun-run-properties 
+     (defvar mcrun-run-properties
           '(("COLUMNS" . "%8ID %8Born %10Formula %4Phase %4Code %5XC %12Type")
-            ("Project" . "ZAO") 
+            ("Project" . "ZAO")
             ("ID" . "ZAO001")
             ("Formula" . "ZnSb2O4")
             ("Phase" . "")
@@ -140,7 +148,10 @@
             ("XC" . "PBE")
             ("N" . "1")
             ("Resource" . "crumble")
-            ("Born" . "20160601")))
+            ("Born" . "20160601")
+            ("Complete" . nil)
+            ("Success" . nil))
+     "Properties alist used to initialize a mcrun org file")
      #+END_SRC
 
      We try to intelligently guess as many properties as possible based on the directory.
@@ -293,7 +304,10 @@
       (mcrun-create-from-input-file-list (list file)))
       #+END_SRC
 
-*** Writing to the db
+*** Database
+
+    An SQLite database is used to track the progress of jobs and
+    identify them with queries.
 
     Useful functions:
     - =(org-entry-properties)= returns an alist of the properties for
@@ -301,6 +315,140 @@
 
     - (org-goto-local-search-headings) looks interesting
 
+**** Reading properties
+
+    The keys to write are extracted from a .org file which contains a
+    '* info' section (i.e. a typical mcrun org file).
+
+    #+BEGIN_SRC elisp
+      (defun mcrun-properties-from-orgfile (path)
+        "Get properties alist from the '* Info' section of a mcrun org file."
+        (progn
+          (defun read-info ()
+            (save-excursion
+              (goto-char 0)
+              (search-forward "* Info")
+              (org-entry-properties nil nil)))
+          (let*  ((buffer (current-buffer))
+                  (orgfile (create-file-buffer path))
+                  (properties (progn    (switch-to-buffer orgfile)
+                                        (find-file path)
+                                        (read-info))))
+            (switch-to-buffer buffer)
+            (kill-buffer orgfile)
+            properties)))
+
+      (defun mcrun-column-data (properties col)
+        "Given a properties alist (String keys) and symbol key,
+         return symbol key and property as a pair. Otherwise return nil."
+        (let ((alist-element (assoc (s-upcase (symbol-name col)) properties)))
+          (if alist-element
+              (cons col (cdr alist-element))
+            nil)
+          )
+        )
+
+    #+END_SRC
+
+**** Writing the DB
+    The database format is defined by a "schema" expressed as a vector.
+
+    #+BEGIN_SRC elisp
+      (defvar mcrun-jobs-schema
+        '([id
+           project
+           (run integer)
+           formula
+           phase
+           code
+           type
+           xc
+           n
+           resource
+           born
+           (complete boolean)
+           (success boolean)
+           notes])
+           "emacsql schema for the mcrun jobs database")
+
+      (defun mcrun-headers-from-schema (schema)
+        "Get a list of keys corresponding to emacsql schema"
+        (seq-map (lambda (x) (if (consp x) (car x) x)) (car schema))
+        )
+     #+END_SRC
+
+     The database interface uses the emacsql package to manage DB objects.
+
+     #+BEGIN_SRC elisp
+       (defun mcrun-jobs-db (file &optional init)
+         "Get emacsql database handle for mcrun jobs.
+                     If init is non-nil, clear existing data."
+         (let ((db (emacsql-sqlite file)))
+           (if init (progn
+                      (emacsql db [:drop-table-if-exists jobs])
+                      (emacsql db [:create-table jobs $S1] mcrun-jobs-schema)))
+           db))
+
+       (defun mcrun-db-insert-row (properties db &optional schema)
+         "Add a set of properties as a row to the mcrun db"
+         (let* ((db-schema (if schema schema mcrun-jobs-schema))
+                (columns (mcrun-headers-from-schema db-schema))
+                (known-properties (mapcar
+                                   (lambda (x) (intern (s-downcase (car x))))
+                                   properties))
+                (properties-alist (seq-filter (lambda (x) x)
+                                              (mapcar (lambda (col)
+                                                        (mcrun-column-data properties col))
+                                                      columns)))
+                (entries (apply 'vector (mapcar 'car properties-alist)))
+                (values (apply 'vector (mapcar 'cdr properties-alist)))
+
+                )
+           (emacsql db [:insert :into jobs $v1
+                                :values $v2] entries values)
+           )
+         )
+
+       (defun mcrun-symbol-keys (properties-list)
+         "Take a list of alists and return a list of alists with symbolic keys"
+         (let* ((symbol-key (lambda (pair)
+                               (cons (intern(s-downcase (car pair))) (cdr pair))))
+               (symbol-keys (lambda (alist)
+                                (seq-map (lambda (pair) (funcall symbol-key pair)) alist)
+                                )))
+         (seq-map (lambda (l) (funcall symbol-keys l)) properties-list)
+         ))
+
+       (defun mcrun-db-insert-rows (properties-list db &optional schema columns)
+         "Add multiple set of properties as rows to the mcrun db."
+
+         (let* ((db-schema (if schema schema mcrun-jobs-schema))
+                (columns (if columns
+                             columns
+                           (apply 'vector
+                                  (mcrun-headers-from-schema db-schema))))
+
+                (mcrun-values-vector
+                 (lambda (props cols)
+                   "Given a properties alist and a vector of column headers,
+                          return corresponding values vector. Needs to be called with funcall,
+                          for stupid Lisp-2 reasons."
+                   (apply 'vector
+                          (seq-map (lambda (col)
+                                     (if (assoc col props) (cdr (assoc col props)) nil))
+                                   cols))))
+
+                (values (seq-map
+                         (lambda (props)
+                           (funcall mcrun-values-vector props columns))
+                         (mcrun-symbol-keys properties-list))))
+
+           (emacsql db [:insert :into jobs $v1
+                                :values $v2] columns values)
+           values
+           ))
+
+     #+END_SRC
 
 ** Python wrappers
    :PROPERTIES:
@@ -321,7 +469,7 @@
    (shell-command-to-string "python ~/src/mcrun/bin/ase-render.py ~/runs/tests/POSCAR")
    #+END_SRC
 
-*** Render image of structure   
+*** Render image of structure
 
     #+BEGIN_SRC python :tangle bin/ase-render.py
     import ase.io
@@ -342,7 +490,7 @@
     #+END_SRC
 
     #+BEGIN_SRC elisp :tangle mcrun.el
-      (defconst mcrun-bin-dir (file-name-as-directory 
+      (defconst mcrun-bin-dir (file-name-as-directory
         (concat (file-name-directory load-file-name) "bin")))
       (defun mcrun-ase-render (input-file)
        "Render a crystal structure to PNG"
